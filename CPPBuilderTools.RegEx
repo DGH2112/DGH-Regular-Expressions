@@ -1,0 +1,169 @@
+/*
+
+  The file defines a regular expression grammar by introducing macros $(Name) into the Regular
+  expression language so that complex regular expressions can be build from simply blocks.
+
+  Author  David Hoyle
+  Version 1.0
+  Date    28 Jan 2016
+
+  Every element must be defined as a macro "$(Name)" followed by an "=" sign and then followed by a
+  regular expression which can include other macros which MUST be defined before they are used.
+
+  You can use C++ style comment, both line (//...) and block (/* ... * /).
+
+  These regular expressions are expected to be parsed with the following options:
+    * For TRegEx:
+       * roMultiLine                  = Changes ^ and $ to match the end of the line.
+       * roSingleLine                 = Changes . to match all character including \n
+       * roExplicitCapture            = Only named captures (?<name>...) are grouped.
+       * roCompiled                   = Compiles for better performance.
+    * For std::wregex:
+       * std::regex_constants::nosubs
+       *
+
+  Below is a quick regular expression reference that is (used|can be used) in the below grammar:
+    ^         Matches a start (line or string depending on mode)
+    $         Matches an end (line or string depending on mode)
+    [...]     Character class
+    [^...]    Character class
+    (...)     Grouping
+    .         Any single character
+    \b        Used to define a word boundary (start or end)
+    \d        Matches any single number
+    \D        Anything NOT \d
+    \n        New line character
+    \r        Carriage return character
+    \s        Matches any whitespace including line-breaks in multi-line mode
+    \S        Anything NOT \s
+    \t        Tab character
+    \w        Matches any single character, number or underscore
+    \W        Anything NOT \w
+    \Q...\E   Literal text span
+    \char     Used to escape a reg ex character as a literal
+    \#        Grouping back reference where # in a number
+    |         Used to delimit option items
+    ?         Matches zero or one of the preceeding element (Greedy)
+    ??        Matches zero or one of the preceeding element (Lazy)
+    +         Matches one or more of the preceeding element (Greedy)
+    +?        Matches one or more of the preceeding element (Lazy)
+    *         Matches zero or more of the preceeding element (Greedy)
+    *?        Matches zero or more of the preceeding element (Lazy)
+    {n,m}     Matches at least n and no more than m preceeding elements (Greedy)
+    {n,m}?    Matches at least n and no more than m preceeding elements (Lazy)
+    #         Start of comment until the end of the line
+    ---------------------------------------------------------------------------
+    (?<=...)  Lookbehind: Successful if CAN match to the left
+    (?<!...)  Lookbehind: Successful if CAN NOT match to the left
+    (?=...)   Lookahead: Successful if CAN match to the right
+    (?!...)   Lookahead: Successful if CAN NOT match to the right
+
+*/
+
+// ### Simply RegEx Macros ###
+$(!Identifier)=[a-zA-Z_]\w*
+$(!CPPBlockComment)=/\*\*?\s*(?<BlockCommentText>.*?)\s*\*?\*/
+$(!CPPLineComment)=[/][/]\s*(?<LineCommentText>.*?)$
+$(!CPPComments)=$(CPPBlockComment)|$(CPPLineComment)
+$(!StringLiteral)=[LRU]?"[^"]*"
+
+// ### Base Types ###
+$(!NestedNameSpecifier)=($(Identifier)\s*::)
+
+// ### Templates ###
+$(!TemplateName)=$(Identifier)
+$(!TemplateNameList)=($(NestedNameSpecifier))?$(Identifier)
+$(!SimpleTemplateID)=$(TemplateName)\<($(TemplateNameList))?\>
+
+// ### Attributes ###
+$(!Attribute)=($(Identifier)\s*::\s*)?$(Identifier)
+$(!AttributeList)=$(Attribute)(\s*,\s*$(Attribute))*
+$(!AttributeSpecifier)=\[\s*\[\s*$(AttributeList)\s*\]\s*\]
+
+// ### Class Base Types ###
+$(!ClassName)=($(Identifier)|$(SimpleTemplateID))
+
+// ### Derived Classes ###
+$(!AccessSpecifier)=\b(private|protected|public)\b
+$(!ClassOrDeclType)=($(NestedNameSpecifier))?$(ClassName)
+$(!BaseTypeSpecifier)=$(ClassOrDeclType)
+$(!BaseSpecifier1)=($(AttributeSpecifier))?\s*$(BaseTypeSpecifier)
+$(!BaseSpecifier2)=($(AttributeSpecifier))?\s*\b(virtual)\b(\s+$(AccessSpecifier))?\s*$(BaseTypeSpecifier)
+$(!BaseSpecifier3)=($(AttributeSpecifier))?(\s+$(AccessSpecifier))?(\s+\b(virtual)\b)?\s*$(BaseTypeSpecifier)
+$(!BaseSpecifier)=($(BaseSpecifier3)|$(BaseSpecifier1)|$(BaseSpecifier2))
+$(!BaseSpecifierList)=\s*:\s*$(BaseSpecifier)(\s*,\s*$(!BaseSpecifier))*
+$(!BaseClause)=$(BaseSpecifierList)
+
+// ### Class RegEx Specification ###
+$(!ClassHeadName)=(?<ClassName>($(!NestedNameSpecifier)\s*)?$(!ClassName))
+$(!ClassVirtSpecifier)=\b(final)\b
+$(!ClassKey)=\b(class|struct|union)\b
+$(!EmbClassModifier)=$(Identifier)
+$(!ClassHead)=($(!ClassKey)\s+($(!AttributeSpecifier)\s+)?($(EmbClassModifier)\s+)?$(!ClassHeadName)(\s+$(!ClassVirtSpecifier))?($(BaseClause))?|$(ClassKey)\s+($(AttributeSpecifier)\s+)?($(BaseClause))?)
+$(!ClassSpecifier)=$(!ClassHead)\s*\{
+
+// ### Types and Enumerates ###
+$(!EnumName)=$(Identifier)
+$(!TypedefName)=$(Identifier)
+$(!TypeName)=$(ClassName)|$(EnumName)|$(TypedefName)|$(SimpleTemplateID)
+$(!TypenameSpecifier)=typename\s+$(NestedNameSpecifier)$(Identifier)|typename\s+$(NestedNameSpecifier)(template\s+)?$(SimpleTemplateID)
+$(!CVQualifier)=\b(const|volatile)\b
+$(!ElaboratedTypeSpecifier)=$(ClassKey)\s*($(AttributeSpecifier)\s*)?($(NestedNameSpecifier)\s*)?$(Identifier)|$(ClassKey)\s*$(SimpleTemplateID)|$(ClassKey)\s*($(NestedNameSpecifier)\s*)?(template\s+)?$(SimpleTemplateID)|enum\s+($(NestedNameSpecifier)\s*)?$(Identifier)
+// $(TypeSpecifierSeq)=$(TypeSpecifier)($(AttributeSpecifier))?|$(TypeSpecifier)//type-specifier-seq
+// $(EnumBase)=\s*:\s*$(TypeSpecifierSeq)
+// $(!EnumKey)=\b(enum\s+class|enum\s+struct|enum)\b\s+
+// $(EnumHead)=$(EnumKey)($(AttributeSpecifier))?($(Identifier))?($(EnumBase))?|$(EnumKey)($(AttributeSpecifier))?$(NestedNameSpecifier)$(Identifier)($(EnumBase))?
+// $(!Enumerator)=$(Identifier)(\s+$(AttributeSpecifier))?
+// $(EnumeratorDefinition)=$(Enumerator)(\s*=\s*[^,\)]+)*
+// $(EnumeratorList)=$(EnumeratorDefinition)(\s*,\s*$(EnumeratorDe?nition))*
+// $(EnumSpecifier)=$(EnumHead)\s+\{($(EnumeratorList))?\}|$(EnumHead)\s+\{$(EnumeratorList)\s*,\s*\}
+$(!DecltypeSpecifier)=decltype\([.]*\)|decltype\s*\(\s*auto\s*\)
+$(!SimpleTypeSpecifier)=($(NestedNameSpecifier))?$(TypeName)|$(NestedNameSpecifier)template\s+$(SimpleTemplateID)|char|char16_t|char32_t|wchar_t|bool|short|int|long|signed|unsigned|float|double|void|auto|$(DecltypeSpecifier)
+$(!TrailingTypeSpecifier)=$(SimpleTypeSpecifier)|$(ElaboratedTypeSpecifier)|$(TypenameSpecifier)|$(CVQualifier)
+$(!TypeSpecifier)=$(TrailingTypeSpecifier)//|$(ClassSpecifier)|$(EnumSpecifier)
+
+// ### Function RegEx ###
+$(!MemInitializer)=$(Identifier)\s*(\([^\)]*\)|\{[^\}]*\})
+$(!MemInitializerList)=($(MemInitializer)(\s*,\s*$(MemInitializer))*)
+$(!CTorInitializer)=\s*:\s*$(MemInitializerList)
+$(!CompoundStatement)=\s*\{
+$(!CompoundStatementHandlerSeq)=\s*\{[^\{]*\}
+$(!FunctionTryBlock)=try(\s*$(CTorInitializer))?$(CompoundStatementHandlerSeq) 
+$(!FunctionBody)=($(CTorInitializer))?$(CompoundStatement)|$(FunctionTryBlock)|(=\s*\b(delete|default)\b\s*);
+$(!VirtSpecifier)=\b(virtual|final)\b
+$(!VirtSpecifierSeq)=$(VirtSpecifier)(\s+$(VirtSpecifier))?
+$(!StorageClassSpecifier)=register|static|thread_local|extern|mutable
+$(!FunctionSpecifier)=\b(inline|virtual|explicit)\b
+$(!DeclSpecifier)=$(StorageClassSpecifier)|$(TypeSpecifier)|$(FunctionSpecifier)|friend|typedef|constexpr
+$(!DeclSpecifierSeq)=$(DeclSpecifier)\s*($(AttributeSpecifier))?(\s+$(DeclSpecifier)\s*$(AttributeSpecifier))
+$(!CVQualifierSeq)=$(CVQualifier)(\s+$(CVQualifier))*
+$(!PtrOperator)=\*$(AttributeSpecifier)?$(CVQualifierSeq)?|&$(AttributeSpecifier)?|&&$(AttributeSpecifier)?|$(NestedNameSpecifier)*$(AttributeSpecifier)?$(CVQualifierSeq)?
+$(!PtrDeclarator)=$(PtrOperator)($(PtrOperator))*
+//$(ConstantExpression)=
+$(!Operator)=(new|delete|new\[\]|delete\[\]|\+|-|\*|/|%|\ˆ|&|\||~|!|=|\<|\>|\+=|-=|\*=|/=|%=`|\ˆ=|&=|\\|=|\<\<|\>\>|\>\>=|\<\<=|==|!=|\<=|\>=|&&|\|\||\+\+|--|,|-\>\*|-\>|\(\)|\[\])
+$(!OperatorFunctionID)=\b(operator)\b\s*$(Operator)
+$(!ConversionDeclarator)=$(PtrOperator)($(PtrOperator))*
+$(!TypeSpecifierSeq)=$(TypeSpecifier)($(AttributeSpecifier))?(\s*$(TypeSpecifier)($(AttributeSpecifier))?)*
+$(!ConversionTypeID)=$(TypeSpecifierSeq)($(ConversionDeclarator))?
+$(!ConversionFunctionID)=\b(operator)\b\s+$(ConversionTypeID)
+$(!LiteralOperatorID)=\b(operator)\b\s+$(StringLiteral)\s+$(Identifier)|\b(operator)\b\s+$(StringLiteral)
+$(!UnqualifiedID)=$(Identifier)|$(OperatorFunctionID)|$(ConversionFunctionID)|$(LiteralOperatorID)|~\s*$(ClassName)|~\s*$(DecltypeSpecifier)//|$(TemplateID)
+$(!QualifiedID)=$(NestedNameSpecifier)$(SimpleTemplateID)?$(UnqualifiedID)/* Not $(TemplateID) has been replaced with $(SimpleTemplateID) to simplify the grammar */
+$(!IDExpression)=$(UnqualifiedID)|$(QualifiedID)
+//$(AbstractDeclarator)=
+//$(!TypeID)=$(TypeSpecifierSeq)($(AbstractDeclarator))?
+//$(!TemplateArgument)=$(TypeID)|$(IDExpression)//|$(ConstantExpression)
+//$(!TemplateArgumentList)=$(TemplateArgument)(\s*\.\.\.)?(\s+$(TemplateArgument)(\s*\.\.\.)?)*
+//$(TemplateID)=$(SimpleTemplateID)|$(OperatorFunctionID)\s*\<\s*($(TemplateArgumentList))?\s*\>|$(LiteralOperatorID)\<($(TemplateArgumentList))?\s*\>
+$(!DeclaratorID)=(\.\.\.)?\s*$(IDExpression)
+$(ParameterDeclaration)=($(AttributeSpecifier))?$(DeclSpecifierSeq)($(Declarator)(\s*=\s*$(InitializerClause))?|($(AbstractDeclarator)?(\s*=\s*$(InitializerClause))?))
+$(ParameterDeclarationClause)=$(ParameterDeclaration)\s*(,\s*$(ParameterDeclaration)|\.\.\.)
+$(ParametersAndQualifiers)=\(\s*$(ParameterDeclarationClause)\s*\)(\$(CVQualifierSeq))?(\s*$(RefQualifier))?(\s*$(ExceptionSpecification))?(\s*$(AttributeSpecifier))?
+$(!NoPtrDeclarator)=$(DeclaratorID)$(AttributeSpecifier)?|$(DeclaratorID)$(AttributeSpecifier)?$(ParametersAndQualifiers)|$(DeclaratorID)$(AttributeSpecifier)?\[[^\]]*\]$(AttributeSpecifier)?|\($(PtrDeclarator)\)
+$(TrailingReturnType)=
+//$(Declarator)=$(PtrDeclarator)|$(NoPtrDeclarator)$(ParametersAndQualifiers)$(TrailingReturnType)
+//$(FunctionDeclaration)=($(AttributeSpecifier)\s+)?($(DeclSpecifierSeq)\s+)?$(Declarator)\s+($(VirtSpecifierSeq)\s+)?$(FunctionBody)
+
+// ### Searchable RegExs ###
+$(ClassDef)=$(ClassSpecifier)
+//$(FunctionDecl)=$(FunctionDeclaration)

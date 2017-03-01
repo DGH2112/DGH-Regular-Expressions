@@ -1,0 +1,33 @@
+[Setup]
+IncBuild=1
+CopyVersionInfoFrom=
+ExcludedResExts=.dcr
+EnabledVersionInfo=1
+IncludeInProject=1
+CompileWithBRCC32=0
+MajorVer=1
+MinorVer=0
+ReleaseVer=0
+BuildVer=630
+ResourceName=DGHRegExITHVerInfo
+WarnBefore=0
+WarnAfter=0
+
+[Zipping]
+Enabled=1
+ZipFile=D:\HoylD\Web Page\Zips\DGHRegEx-1.0.zip
+BasePath=D:\HoylD\RAD Studio\
+ExclusionFiles=
+
+[VersionInfo]
+CompanyName=Season's Fall Music
+FileDescription=DGH RegEx: A test application for regular expression construction
+FileVersion=1.0.0.630
+InternalName=DGHRegEx
+LegalCopyright=Season's Fall Music
+LegalTrademarks=Season's Fall Music
+OriginalFilename=DGHRegEx
+ProductName=DGHRegEx
+ProductVersion=1.0
+Comments=DGHGrep: A test application for regular expression construction
+
